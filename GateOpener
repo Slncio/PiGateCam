@@ -1,0 +1,73 @@
+# Import Python header files
+import RPi.GPIO as GPIO
+import time
+import os
+import signal
+# Set the GPIO naming convention
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)  
+# Set a variable to hold the GPIO Pin identity
+PinPIR1 = 17 #blue
+PinPIR2 = 27 #green
+PinGate = 18
+sudoPassword = "APASSWORD"
+phone = "AA:MM:AA:CC:AA:DD"
+print("PIR Module Test (CTRL-C to exit)")  
+# Set pin as input
+GPIO.setup(PinPIR1, GPIO.IN)
+GPIO.setup(PinPIR2, GPIO.IN)
+GPIO.setup(PinGate, GPIO.OUT) 
+# Variables to hold the current and last states
+Current_State  = 0
+Previous_State = 0
+
+#set led to off to start with
+GPIO.output(PinGate, GPIO.HIGH)
+
+def searchForMacs( addr ):
+    foundAddr = False
+    command = "hcitool info " + addr + " > scan.txt & pkill --signal SIGINT hcitool"
+    OutPut = os.system('echo %s|sudo -S %s' % (sudoPassword,command)) #not secure! 
+    time.sleep(3)
+    scan = open("scan.txt","r")
+    readscan = scan.read()
+    if addr in readscan:
+            foundAddr = True
+    return foundAddr
+    
+try:
+    print("Waiting for PIR to settle ...")
+    # Loop until PIR output is 0
+    while (GPIO.input(PinPIR1)==1 and GPIO.input(PinPIR2)==1):
+        Current_State = 0
+
+    print("  Ready")
+    # Loop until users quits with CTRL-C
+    while True:
+        # Read PIR state
+        if GPIO.input(PinPIR1)==1 or GPIO.input(PinPIR2)==1:
+            Current_State = 1
+        else:
+            Current_State = 0 
+        # If the PIR is triggered
+        if Current_State==1 and Previous_State==0:
+            print("  Motion detected!")
+            print("Scanning for bluetooth devices...")
+
+            if searchForMacs(phone):
+                print ("Found MAC address:%a" %phone)
+                GPIO.output(PinGate, GPIO.LOW)
+
+            # Record previous state
+            Previous_State=1  
+        # If the PIR has returned to ready state
+        elif Current_State==0 and Previous_State==1:
+            print("  Ready")
+            Previous_State=0
+            GPIO.output(PinGate, GPIO.HIGH)
+        # Wait for 10 milliseconds
+        time.sleep(0.01)  
+except KeyboardInterrupt:
+    print("  Quit")  
+    # Reset GPIO settings 
+    GPIO.cleanup()
